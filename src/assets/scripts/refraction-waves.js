@@ -1,16 +1,13 @@
-// import {TimelineMax} from 'gsap';
+import {TimelineMax} from 'gsap';
 import * as THREE from 'three';
-let OrbitControls = require('three-orbit-controls')(THREE);
+// let OrbitControls = require('three-orbit-controls')(THREE);
+import dat from 'dat-gui';
 
 import fragment from './shaders/refraction-waves.fragment.glsl';
 import vertex from './shaders/refraction-waves.vertex.glsl';
-import { TimelineMax } from 'gsap';
-
-// import {chunckPattern20} from './chunck.patterns.js';
 
 export default class Animation {
     constructor() {
-        // let self = this;
         this.container = document.querySelector('.js-animation');
         this.time = 0;
         this.size = {
@@ -18,33 +15,54 @@ export default class Animation {
             height: window.innerHeight,
         };
 
+        this.tl = new TimelineMax();
+        this.animationType = 0; // 0, 1, 2, 3
         this.animating = false;
         this.counter = 0;
+
+        // waves settings for vertex shader and animation
+        this.waves = {
+            length : {
+                onIdle: 3,
+                onTransition: 22,
+            },
+            intensity: 0.025
+        }
+
+        this.distortionOffest = 0.005;
+        this.mouseFactor = 0.2;
 
         this.destination = {x:0,y:0};  // mouse destination
 
         this.textures = [
             THREE.ImageUtils.loadTexture( 'assets/images/img1.jpg' ),
             THREE.ImageUtils.loadTexture( 'assets/images/img2.jpg' ),
-            THREE.ImageUtils.loadTexture( 'assets/images/img3.jpg' ),
+            // THREE.ImageUtils.loadTexture( 'assets/images/img3.jpg' ),
             THREE.ImageUtils.loadTexture( 'assets/images/img4.jpg' ),
             THREE.ImageUtils.loadTexture( 'assets/images/img5.jpg' ),
+            // THREE.ImageUtils.loadTexture( 'assets/images/img6.jpg' ),
+            THREE.ImageUtils.loadTexture( 'assets/images/img7.jpg' ),
+            THREE.ImageUtils.loadTexture( 'assets/images/img8.jpg' ),
+            THREE.ImageUtils.loadTexture( 'assets/images/img9.jpg' ),
+            THREE.ImageUtils.loadTexture( 'assets/images/img10.jpg' ),
         ];
-        let tex1 = new THREE.ImageUtils.loadTexture( 'assets/images/img1.jpg' );
-        
 
-        console.log(this.textures);
-        
+        this.datGUI = true;
+                 
         this.materials = {
             refractionWaves: new THREE.ShaderMaterial({
                 side: THREE.DoubleSide,
                 uniforms: {
+                    type: { type: 'f', value: this.animationType },
                     time: { type: 'f', value: 0 },
                     ratio: { type: 'f', value: 1 },
-                    waveLength: { type: 'f', value: 3 },
+                    waveLength: { type: 'f', value: this.waves.length.onIdle },
+                    waveIntensity: { type: 'f', value: this.waves.intensity },
+                    distortionOffest: { type: 'f', value: this.distortionOffest },
+                    mouseFactor: { type: 'f', value: this.mouseFactor },
                     mouse: { type: 'v2', value: new THREE.Vector2() },
                     resolution: { type: 'v2', value: new THREE.Vector2(this.size.width, this.size.height) },
-                    img1: {  type: 't', value: tex1 }
+                    img1: {  type: 't', value: this.textures[0] }
                 },
                 // wireframe: true,
                 vertexShader: vertex,
@@ -79,7 +97,7 @@ export default class Animation {
         this.camera.position.set(0, 0, 1);
 
         // create THREE.js controls
-        this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+        // this.controls = new OrbitControls(this.camera, this.renderer.domElement);
 
         // let axesHelper = new THREE.AxesHelper( 5 );
         // this.scene.add( axesHelper );
@@ -90,8 +108,10 @@ export default class Animation {
         
         this.onWindowResize();
         window.addEventListener('resize', this.onWindowResize.bind(this), false);
-        window.addEventListener('mousemove', this.onMouseMove.bind(this), false);
-        window.addEventListener('click', this.onClick.bind(this), false);
+        this.container.addEventListener('mousemove', this.onMouseMove.bind(this), false);
+        this.container.addEventListener('click', this.onClick.bind(this), false);
+
+        this.initDatGUI();
     }
 
     onWindowResize() {
@@ -124,12 +144,57 @@ export default class Animation {
         this.counter = (this.counter +1) % this.textures.length;
         let tl = new TimelineMax({onComplete: function() {this.animating = 0;}.bind(this)});
         tl
-        .to(this.materials.refractionWaves.uniforms.waveLength,0.5,{value: 22})
+        .to(this.materials.refractionWaves.uniforms.waveLength,0.5,{value: this.waves.length.onTransition})
         .to(this.materials.refractionWaves.uniforms.ratio,0.5,{value: 0, onComplete: function() {
             this.materials.refractionWaves.uniforms.img1.value = this.textures[this.counter];
         }.bind(this)},0)
         .to(this.materials.refractionWaves.uniforms.ratio,0.5,{value: 1})
-        .to(this.materials.refractionWaves.uniforms.waveLength,0.5,{value: 3},0.5);
+        .to(this.materials.refractionWaves.uniforms.waveLength,0.5,{value: this.waves.length.onIdle},0.5);
+    }
+
+    initDatGUI(){
+        if (this.datGUI) {
+
+            let gui = new dat.GUI();
+            // Animation change
+            let controllerAnimationType = gui.add(this, 'animationType', 0, 3).step(1);
+            controllerAnimationType.onFinishChange((value) => {
+                this.tl.to(this.materials.refractionWaves.uniforms.type,0,{value: value});
+                this.animationType = value;
+            });
+
+            // Vertex shader settings
+            let folderVertex = gui.addFolder('Vertex (waves length and intensity)');
+            let controllerWavesIdle = folderVertex.add(this.waves.length, 'onIdle', 0, 100).step(1);
+            let controllerWavesTransition = folderVertex.add(this.waves.length, 'onTransition', 0, 250).step(1);
+            let controllerWavesintensity = folderVertex.add(this.waves, 'intensity', 0, 0.2);
+            controllerWavesIdle.onFinishChange((value) => {
+                this.tl.to(this.materials.refractionWaves.uniforms.waveLength,0,{value: value});
+                this.waves.length.onIdle = value;
+            });
+            controllerWavesTransition.onFinishChange((value) => {
+                this.waves.length.onTransition = value;
+            });
+            controllerWavesintensity.onFinishChange((value) => {
+                this.tl.to(this.materials.refractionWaves.uniforms.waveIntensity,0,{value: value});
+                this.waves.intensity = value;
+            });
+
+            // Fragment shader settings
+            let folderFragment = gui.addFolder('Fragment (waves length and intensity)');
+            let controllerMouseFactor = folderFragment.add(this, 'mouseFactor', 0, 1);
+            let controllerDistortionOffest = folderFragment.add(this, 'distortionOffest', 0, 0.05);
+            controllerMouseFactor.onFinishChange((value) => {
+                this.tl.to(this.materials.refractionWaves.uniforms.mouseFactor,0,{value: value});
+                this.mouseFactor = value;
+            });
+            controllerDistortionOffest.onFinishChange((value) => {
+                this.tl.to(this.materials.refractionWaves.uniforms.distortionOffest,0,{value: value});
+                this.distortionOffest = value;
+            });
+            
+
+        }
     }
 
 
